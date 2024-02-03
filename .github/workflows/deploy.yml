@@ -1,0 +1,57 @@
+name: Build and deploy jnr app
+
+on:
+  push:
+    branches:
+      - main
+      - development
+  workflow_dispatch:
+
+env:
+  LOKI_USR: ${{ secrets.LOKI_USR }}
+  LOKI_PSW: ${{ secrets.LOKI_PSW }}
+  PROD_DB_USR: ${{ secrets.DB_USR }}
+  PROD_DB_PSW: ${{ secrets.DB_PSW }}
+
+jobs:
+  deploy-production:
+    name: Deploy production
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Prepare production envs
+        run: |
+          echo 'DOMAIN=app.neuralle.com' >> .production.env
+          echo LOKI_USR=$LOKI_USR >> .production.env
+          echo LOKI_PSW=$LOKI_PSW >> .production.env
+
+          sed -i -e "s/DB_HOST=localhost/DB_HOST=pg_db/" .production.env
+          sed -i -e "s/DB_USERNAME=.*/DB_USERNAME=$PROD_DB_USR/" .production.env
+          sed -i -e "s/DB_PASSWORD=.*/DB_PASSWORD=$PROD_DB_PSW/" .production.env
+
+      - name: Start docker compose
+        run: |
+          COMPOSE_PROJECT_NAME=jnr-production docker compose -f docker-compose.prod.yml --env-file .production.env up -d --build
+
+  deploy-development:
+    name: Deploy development
+    runs-on: self-hosted
+    if: github.ref == 'refs/heads/development'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+
+      - name: Prepare development envs
+        run: |
+          echo 'DOMAIN=devapp.neuralle.com' >> .development.env
+          echo LOKI_USR=$LOKI_USR >> .development.env
+          echo LOKI_PSW=$LOKI_PSW >> .development.env
+
+          sed -i -e "s/DB_HOST=localhost/DB_HOST=pg_db/" .development.env
+
+      - name: Start docker compose
+        run: |
+          COMPOSE_PROJECT_NAME=jnr-development docker compose -f docker-compose.dev.yml --env-file .development.env up -d --build

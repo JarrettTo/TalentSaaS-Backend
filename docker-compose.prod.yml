@@ -1,0 +1,57 @@
+version: "3.8"
+x-logging: &logging
+  logging:
+    driver: loki
+    options:
+      loki-url: "https://${LOKI_USR}:${LOKI_PSW}@loki.unistory.app/loki/api/v1/push"
+      loki-external-labels: "type=prod,repo=${COMPOSE_PROJECT_NAME},job=docker,container_name={{.Name}}"
+
+services:
+  backend:
+    <<: *logging
+    build:
+      context: .
+      args:
+        - DOCKER_ENV=production
+    restart: unless-stopped
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.backend-prod.entrypoints=websecure"
+      - "traefik.http.routers.backend-prod.rule=Host(`${DOMAIN}`) && PathPrefix(`/api`)"
+      - "traefik.http.routers.backend-prod.tls.certresolver=le"
+      - "traefik.http.routers.backend-prod.tls=true"
+    volumes:
+      - public:/app/public
+    networks:
+      - default
+      - pg_db
+      - proxy
+
+  pg_db:
+    <<: *logging
+    image: postgres:13
+    restart: unless-stopped
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USERNAME}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - pg_db
+      - pgadmin
+
+volumes:
+  pgdata:
+  public:
+
+networks:
+  default:
+    name: ${COMPOSE_PROJECT_NAME}
+  pg_db:
+  pgadmin:
+    name: pgadmin
+    external: true
+  proxy:
+    name: traefik
+    external: true
